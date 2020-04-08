@@ -17,20 +17,16 @@ class Listing:
         self.numListings = float(numListings)
         self.numDays = float(numDays)
 
-        self.boroughEnum = {
-            "Bronx": 1,
-            "Manhattan": 2,
-            "Queens": 3,
-            "Brooklyn": 4,
-            "Staten Island": 5
-        }
-        self.borough = self.boroughEnum.get(borough)
-        self.roomEnum = {
-            "Shared room": 1,
-            "Private room": 2,
-            "Entire home/apt": 3
-        }
-        self.roomType = self.roomEnum.get(roomType)
+        self.bronx = 1 if borough == "Bronx" else 0
+        self.manhattan = 1 if borough == "Manhattan" else 0
+        self.queens = 1 if borough == "Queens" else 0
+        self.brooklyn = 1 if borough == "Brooklyn" else 0
+        self.staten = 1 if borough == "Staten Island" else 0
+
+        self.shared = 1 if roomType == "Shared room" else 0
+        self.private = 1 if roomType == "Private room" else 0
+        self.entire = 1 if roomType == "Entire home/apt" else 0
+        
         if latestReview == '':
             self.latestReview =     datetime.timedelta(-1)
         elif latestReview.find('/') != -1:
@@ -55,8 +51,8 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.lin1 = nn.Linear(7, 4)
-        self.lin2 = nn.Linear(4, 1)
+        self.lin1 = nn.Linear(13, 7)
+        self.lin2 = nn.Linear(7, 1)
 
     def forward(self, x):
         x = F.relu(self.lin1(x))
@@ -65,22 +61,22 @@ class Net(nn.Module):
 
 net = Net()
 net.to(device)
-learningRate = 0.0001
+learningRate = 0.00001
 
 optimizer = optim.SGD(net.parameters(), lr=learningRate)
 
 random.shuffle(totalData)
 
 trainData = totalData[:34226]
-trainParamTensor = torch.tensor([[[i.reviews, i.reviewsPerMonth, i.numListings, i.numDays, i.borough, i.roomType, i.latestReview.days]] for i in trainData], dtype=torch.double).to(device).float()
+trainParamTensor = torch.tensor([[[i.reviews, i.reviewsPerMonth, i.numListings, i.numDays, i.bronx, i.manhattan, i.queens, i.brooklyn, i.staten, i.shared, i.private, i.entire, i.latestReview.days]] for i in trainData], dtype=torch.double).to(device).float()
 trainLabelTensor = torch.tensor([[[i.price]] for i in trainData], dtype=torch.double).to(device).float()
 
 validationData = totalData[34226:41561]
-validationParamTensor = torch.tensor([[[i.reviews, i.reviewsPerMonth, i.numListings, i.numDays, i.borough, i.roomType, i.latestReview.days]] for i in validationData], dtype=torch.double).to(device).float()
+validationParamTensor = torch.tensor([[[i.reviews, i.reviewsPerMonth, i.numListings, i.numDays, i.bronx, i.manhattan, i.queens, i.brooklyn, i.staten, i.shared, i.private, i.entire, i.latestReview.days]] for i in validationData], dtype=torch.double).to(device).float()
 validationLabelTensor = torch.tensor([[[i.price]] for i in validationData], dtype=torch.double).to(device).float()
 
 testData = totalData[41561:]
-testParamTensor = torch.tensor([[[i.reviews, i.reviewsPerMonth, i.numListings, i.numDays, i.borough, i.roomType, i.latestReview.days]] for i in testData], dtype=torch.double).to(device).float()
+testParamTensor = torch.tensor([[[i.reviews, i.reviewsPerMonth, i.numListings, i.numDays, i.bronx, i.manhattan, i.queens, i.brooklyn, i.staten, i.shared, i.private, i.entire, i.latestReview.days]] for i in testData], dtype=torch.double).to(device).float()
 testLabelTensor = torch.tensor([[[i.price]] for i in testData], dtype=torch.double).to(device).float()
 
 lossArray = []
@@ -93,7 +89,6 @@ while True:
     print(loss.item())
     loss.backward()
     optimizer.step()
-    
     with torch.no_grad():
         out = net(validationParamTensor)
         loss = lossfn(out, validationLabelTensor)
@@ -101,6 +96,13 @@ while True:
         lossArray.append(loss.item())
 
     if (len(lossArray) > 10):
-        if lossArray[len(lossArray) - 1]/lossArray[len(lossArray) - 11] >= 1:
+        if lossArray[len(lossArray) - 1]> lossArray[len(lossArray) - 11]:
             print("Done")
             break
+
+
+with torch.no_grad():
+        out = net(testParamTensor)
+        lossfn = nn.MSELoss()
+        loss = lossfn(out, testLabelTensor)
+        print("test loss " + str(loss.item()))
