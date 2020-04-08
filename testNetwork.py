@@ -6,6 +6,9 @@ import torch.optim as optim
 import datetime
 import torch
 import random
+import matplotlib.pyplot as plt
+import cv2
+import numpy as np
 
 def make1HotVector(labels, value):
     outArray = []
@@ -33,11 +36,11 @@ class Listing:
         self.neighborhood = make1HotVector(neighborhoodLabels, neighborhood)
         
         if latestReview == '':
-            self.latestReview =     datetime.timedelta(-1)
+            self.latestReview = datetime.timedelta(0)
         elif latestReview.find('/') != -1:
-            self.latestReview = datetime.date(2019, 8, 12) - datetime.datetime.strptime(latestReview, '%m/%d/%Y')
+            self.latestReview = datetime.date(2019, 8, 13) - datetime.datetime.strptime(latestReview, '%m/%d/%Y')
         else:
-            self.latestReview = datetime.datetime(2019, 8, 12) - datetime.datetime.strptime(latestReview, '%Y-%m-%d')
+            self.latestReview = datetime.datetime(2019, 8, 13) - datetime.datetime.strptime(latestReview, '%Y-%m-%d')
         
         self.price = int(price)
 
@@ -61,7 +64,8 @@ for row in data_reader:
         continue
     totalData.append(Listing(row[4], row[5], row[8], row[11], row[12], row[13], row[14], row[15], row[9]))
 print(len(totalData))
-device = "cuda" if torch.cuda.is_available() else "cpu"
+#device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu"
 
 class Net(nn.Module):
     def __init__(self, input_size):
@@ -83,26 +87,29 @@ class Net(nn.Module):
 random.shuffle(totalData)
 
 trainData = totalData[:34226]
-trainParamTensor = torch.tensor([[[i.reviews, i.reviewsPerMonth, i.numListings, i.numDays, i.latestReview.days] + i.borough + i.roomType + i.neighborhood] for i in trainData], dtype=torch.double).to(device).float()
+trainParamTensor = torch.tensor([[i.reviews, i.reviewsPerMonth, i.numListings, i.numDays, i.latestReview.days] + i.borough + i.roomType + i.neighborhood for i in trainData], dtype=torch.double).to(device).float()
 trainLabelTensor = torch.tensor([[[i.price]] for i in trainData], dtype=torch.double).to(device).float()
 
 validationData = totalData[34226:41561]
-validationParamTensor = torch.tensor([[[i.reviews, i.reviewsPerMonth, i.numListings, i.numDays, i.latestReview.days] + i.borough + i.roomType + i.neighborhood] for i in validationData], dtype=torch.double).to(device).float()
+validationParamTensor = torch.tensor([[i.reviews, i.reviewsPerMonth, i.numListings, i.numDays, i.latestReview.days] + i.borough + i.roomType + i.neighborhood for i in validationData], dtype=torch.double).to(device).float()
 validationLabelTensor = torch.tensor([[[i.price]] for i in validationData], dtype=torch.double).to(device).float()
 
 testData = totalData[41561:]
-testParamTensor = torch.tensor([[[i.reviews, i.reviewsPerMonth, i.numListings, i.numDays, i.latestReview.days] + i.borough + i.roomType + i.neighborhood] for i in testData], dtype=torch.double).to(device).float()
+testParamTensor = torch.tensor([[i.reviews, i.reviewsPerMonth, i.numListings, i.numDays, i.latestReview.days] + i.borough + i.roomType + i.neighborhood for i in testData], dtype=torch.double).to(device).float()
 testLabelTensor = torch.tensor([[[i.price]] for i in testData], dtype=torch.double).to(device).float()
 
-net = Net(trainParamTensor.shape[2])
+net = Net(trainParamTensor.shape[1])
 net.to(device)
-learningRate = 0.00001
+learningRate = 0.000001
 
 optimizer = optim.SGD(net.parameters(), lr=learningRate)
 
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer)
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience = 5)
 
 lossArray = []
+
+blank = np.zeros((400, 400, 3), np.uint8)
+
 
 while True:
     optimizer.zero_grad()
@@ -111,14 +118,21 @@ while True:
     loss = lossfn(outVal, trainLabelTensor)
     print(loss.item())
     loss.backward()
+    lossArray.append(loss.item())
     optimizer.step()
     with torch.no_grad():
         out = net(validationParamTensor)
         loss = lossfn(out, validationLabelTensor)
         print("Val loss " + str(loss.item()))
-        lossArray.append(loss.item())
+        #lossArray.append(loss.item())
         scheduler.step(loss)
-
+    cv2.imshow("test", blank)
+    k = cv2.waitKey(1)
+    if k == 27:
+        break
+    
+plt.plot(lossArray)
+plt.show()
 
 with torch.no_grad():
         out = net(testParamTensor)
